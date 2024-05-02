@@ -1,13 +1,9 @@
+from copy import copy
 import numpy as np
 import random
 from matplotlib import pyplot as plt
-from copy import copy
-
- 
 
 class MultiArmedFish():
-
-   
 
     def __init__(self, lures, casts = 300):
         
@@ -101,13 +97,8 @@ class MultiArmedFish():
                 cast_failure = [False]*(self.casts - success_count)
                 cast_success = cast_success + cast_failure
                 
-#             if isinstance(cast_success, list):
             simulation_results.append(np.sum(cast_success))
-                
-#             else:
-#                 simulation_results.append(cast_success)
             
-        
         if show_results:
             print(f'mean catch = {np.mean(simulation_results)}')
             print(f'std catch = {np.std(simulation_results)}')
@@ -117,6 +108,7 @@ class MultiArmedFish():
         
         return simulation_results
     
+
     def simulate_cast(self, lure_pct, n = 1):
         
         '''
@@ -156,7 +148,6 @@ class MultiArmedFish():
             
             return cast_success
         
-    
 
     def optimal_strategy(self):
         
@@ -181,6 +172,12 @@ class MultiArmedFish():
 
 
     def random(self):
+
+        '''
+            Runs a fishing trip where each cast uses a random
+            lure.  Intended to be used as a floor for algorithm
+            comparison.
+        '''
         
         cast_success = []
         
@@ -195,13 +192,29 @@ class MultiArmedFish():
     
     
     def ucb(self, bound_multiplier):
+
+        '''
+            Runs the upper confidence bound algorithm. 
+            This algorithm adds a bonus to the observed 
+            catch rate based on the number of observations.
+            Higher observation count gives smaller bonus.
+
+            inputs:
+                bound_multiplier (float) : controls the size of the bonus
+                                           larger -> larger bonus
+            
+            outputs:
+                cast_success (list) : list of 1's and 0's representing if a cast
+                                      caught a fish or not
+
+        '''
         
         ucb_dict = {}
         # for each lure, create a list dicitonary of lists
         # that have UCB metrics
         for arm in self.lures:
             ucb_dict[arm] = {'success' : [],
-                             'ucb'     : np.inf}
+                             'ucb'     : 1}
             
         cast_success = []
         
@@ -212,23 +225,31 @@ class MultiArmedFish():
             
             catch_bool = self.simulate_cast(self.lures[highest_ucb_lure])
             cast_success.append(catch_bool)
+
             # update ucb_dict for cast
             successes = ucb_dict[highest_ucb_lure]['success']
             successes.append(catch_bool)
             
-            prob_estimate = np.mean(successes)
-            ucb_estimate = prob_estimate + bound_multiplier*np.sqrt((np.log(cast))/len(successes))
+            prob_estimate = np.mean(successes)/len(successes)
+            ucb_estimate = prob_estimate + bound_multiplier*(1/len(successes))
             
             ucb_dict[highest_ucb_lure] = {'success' : successes,
                                           'ucb' : ucb_estimate}
             
-            
-            
-            # find lure with highest ucb
-            
         return cast_success
     
     def find_highest_ucb(self, ucb_dict):
+
+        '''
+            Called by ucb method. Finds the lure with the
+            highest upper confidence bound.
+
+            inputs:
+                ucb_dict (dict) : dictionary with lure as keys and
+                                  upper confidence bound as element
+            output:
+                highest_lure (str) : name of lure with highest ucb
+        '''
     
         highest_estimate = -np.inf
         
@@ -240,12 +261,9 @@ class MultiArmedFish():
                 highest_estimate = temp_estimate
                 highest_lure = lure
                 
-        return lure
+        return highest_lure
             
 
-    
-    # I should add a switch schedule, where we switch less frequently later in the
-    # simulation, like simulated annealing
     def epsilon_greedy(self, epsilon, schedule = [1]):
         
         '''
@@ -272,9 +290,6 @@ class MultiArmedFish():
         
         # start with a random lure
         curr_lure, curr_lure_pct = self.random_start()
-        
-        # populate dictionary with the first lure - give it an empty list as
-        # the element
         
         # simulate the first cast
         first_cast_bool = self.simulate_cast(curr_lure_pct)
@@ -343,8 +358,7 @@ class MultiArmedFish():
                 
         
         return cast_success
-                
-       
+ 
 
     def one_round_learn(self, num_tests, output_for_elminate_n = False,
                         output_for_elminate_dict = {}):
@@ -368,7 +382,7 @@ class MultiArmedFish():
         # test each lure to decide which one to use for the
         # rest of the casts
         
-        # use input ditionary if one is given
+        # use input dictionary if one is given
         if len(output_for_elminate_dict) == 0:
             
             lure_dict = self.lures
@@ -414,7 +428,6 @@ class MultiArmedFish():
         return catch_list
     
 
-    
     def eliminate_n(self, n, num_tests):
         
         '''
@@ -455,8 +468,7 @@ class MultiArmedFish():
                 
                 catches += temp_catches
                 
-                lure_dict = dict(list(sorted_dict.items())[:n_keep])
-                
+                lure_dict = dict(list(sorted_dict.items())[:n_keep])         
                 
         # now use remaining casts with the best lure from tests
         best_lure_pct = self.lures[best_lure[0]]

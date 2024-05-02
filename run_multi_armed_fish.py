@@ -5,12 +5,7 @@ import pandas as pd
 
 from multi_armed_fish import MultiArmedFish
 
-def convert_to_dict(results, algo_name):
-
-    results_df = pd.DataFrame({'algorithm' : [algo_name]*len(results),
-                                   'catches' : results})
-    return results_df
-
+# set up attributes for MultiArmedFish instance
 iterations = 500
 casts = 300
 lures = {'crank bait' : 0.2,
@@ -21,38 +16,94 @@ lures = {'crank bait' : 0.2,
 
 fishing_trip = MultiArmedFish(lures, casts)
 
-optimal_results =  fishing_trip.multiple_simulations('optimal', iterations)
-optimal_results_df= convert_to_dict(optimal_results, 'Optimal')
+# create all the algorithms to run
+algorithm_runs = [{'name' : 'Optimal',
+                   'strategy' : 'optimal',
+                   'iterations' : iterations},
+                   {'name' : 'Random',
+                   'strategy' : 'random',
+                   'iterations' : iterations},
+                   {'name' : 'One -Round',
+                    'strategy' : 'one_round_learn',
+                   'num_tests' : 4,
+                   'iterations' : iterations
+                   },
+                  {'name' : 'Epsilon',
+                   'strategy' : 'epsilon_greedy',
+                   'epsilon' : 0.05,
+                   'iterations' : iterations
+                   }, 
+                  {'name' : 'Iter. Elimination',
+                   'strategy' : 'eliminate_n',
+                   'n' : 2,
+                   'num_tests' : 3,
+                   'iterations' : iterations
+                   }, 
+                    {'name' : 'UCB',
+                   'strategy' : 'ucb',
+                   'bound_multiplier' : 0.1,
+                   'iterations' : iterations
+                   }                                                                                                                                                                                                                            
+                   ]
 
-eliminate_n_results = fishing_trip.multiple_simulations('eliminate_n', iterations, n = 2, num_tests = 10)
-eliminate_n_results_df = convert_to_dict(eliminate_n_results, 'Eliminate N')
+def convert_to_dict(results, algo_name):
 
-ucb_results = fishing_trip.multiple_simulations('ucb', iterations, bound_multiplier = 500)
-ucb_results_df = convert_to_dict(ucb_results, 'UCB')
+    '''Convert simulation output to dataframe
 
-ucb_results = fishing_trip.multiple_simulations('ucb', iterations, bound_multiplier = 2)
-ucb_results_10x_df = convert_to_dict(ucb_results, 'UCB 10x')
+       inputs:
+            results (list)  : list of bools representing
+                              if a fish was caught on a cast
+            algo_name (str) : name of algorithm that will be in
+                              dataframe and later used in visualization
+        
+       outputs:
+            results_df (dataframe) : df with two columns, one with
+                                     algorithm name, another with 
+                                     boolean of success for each cast
+    '''
 
-epsilon_greedy_results = fishing_trip.multiple_simulations('epsilon_greedy', iterations, epsilon = 0.10, schedule = [1, 0.5, 0.1, 0])
-epsilon_greedy_results_df = convert_to_dict(epsilon_greedy_results, 'Epsilon Greedy')
-
-one_round_results = fishing_trip.multiple_simulations('one_round_learn', iterations, num_tests = 2)
-one_round_results_df = convert_to_dict(one_round_results, 'One Round')
+    results_df = pd.DataFrame({'algorithm' : [algo_name]*len(results),
+                                   'catches' : results})
+    return results_df
 
 
+def compare_algorithms(trip_instance, algorithm_runs):
 
-# show results in box plot
-final_df = pd.concat([optimal_results_df, 
-                      eliminate_n_results_df,
-                      ucb_results_df,
-                      ucb_results_10x_df,
-                      epsilon_greedy_results_df,
-                      one_round_results_df])
-# make box plot that shows the results
-sns.boxplot(x = final_df['catches'],
-            y = final_df['algorithm']
-            )
-# plt.yticks(['', 'Optimal', 'One Round']) 
-plt.xlabel('Fish caught')
-plt.ylabel('Algorithms')
-plt.show()
+    '''
+        Runs multiple algorithms based on user inputs
+        and make a boxplot to compare the runs.
+
+        inputs:
+            trip_instance (MultiArmedFish) : instance of MultiArmedFish.
+            algorithm_runs (list)          : list of dictionaries - each 
+                                             element/dictionary has inputs
+                                             for multiple_simulations method
+    '''
+
+    solution_df_list = []
+
+    for run_args in algorithm_runs:
+
+        temp_name = run_args.pop('name')
+
+        temp_result = trip_instance.multiple_simulations(**run_args)
+        temp_result_df = convert_to_dict(temp_result, temp_name)
+        solution_df_list.append(temp_result_df)
+
+    final_df = pd.concat(solution_df_list)
+
+    # make box plot that shows the results
+    sns.boxplot(x = final_df['catches'],
+                y = final_df['algorithm']
+                )
+    # plt.yticks(['', 'Optimal', 'One Round']) 
+    plt.xlabel('Fish caught', fontsize=14)
+    plt.xticks(fontsize=12)
+    plt.ylabel('Algorithms', fontsize=14)
+    plt.yticks(fontsize=12)
+    plt.show()    
+
+    return
+
+# compare algorithms
+compare_algorithms(fishing_trip, algorithm_runs)
