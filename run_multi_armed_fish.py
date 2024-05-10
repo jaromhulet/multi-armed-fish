@@ -28,11 +28,12 @@ algorithm_runs = [{'name' : 'Optimal',
                    'num_tests' : 4,
                    'iterations' : iterations
                    },
-                  {'name' : 'Epsilon',
+                {'name' : 'Epsilon - 0.10, 35',
                    'strategy' : 'epsilon_greedy',
-                   'epsilon' : 0.05,
-                   'iterations' : iterations
-                   }, 
+                   'epsilon' : 0.10,
+                   'iterations' : iterations,
+                   'rand_start_casts' : 35
+                   },            
                   {'name' : 'Iter. Elimination',
                    'strategy' : 'eliminate_n',
                    'n' : 2,

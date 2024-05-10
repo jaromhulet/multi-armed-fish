@@ -63,6 +63,10 @@ class MultiArmedFish():
                                       to be run
                 other key word args : any additional arguments needed for 
                                       specific strategies
+
+            output:
+                simulation_results (list) : list of bools that indicate if a cast
+                                            caught a fish or not
         '''
         
         simulation_results = []
@@ -262,106 +266,11 @@ class MultiArmedFish():
                 highest_lure = lure
                 
         return highest_lure
-            
-
-    def epsilon_greedy(self, epsilon, schedule = [1]):
-        
-        '''
-            Starts with a random lure and gathers data on it,
-            with a probability of epsilon at each cast, change the lure
-            and gather data.  With a probability of 1-epsilon go back to 
-            the lure with the highest payout
-            
-            inputs:
-                epsilon (float) : probability used to randomly switch lures
-                schedule (list) : factors to adjust epsilon based on 
-                                  total number of casts - can be used 
-                                  to lower the probability of switching later
-                                  in trip - default = [1]
-                
-            outputs:
-                cast_success (list) : list of 1's and 0's representing if a cast
-                                      caught a fish or not
-        
-        '''
-        
-        # create a dictionary to keep track of observed catches
-        obs_catch_dict = {}
-        
-        # start with a random lure
-        curr_lure, curr_lure_pct = self.random_start()
-        
-        # simulate the first cast
-        first_cast_bool = self.simulate_cast(curr_lure_pct)
-        cast_success = [first_cast_bool]
-        
-        # update dictionary to keep track of curr_lure's record
-        obs_catch_dict[curr_lure] = [first_cast_bool]
-        
-        # set up casts number for each schedule amount
-        casts_per_schedule = self.casts / len(schedule)
-            
-        
-        # for the remaining casts, use the epsilon-greedy approach
-        for cast in range(1, self.casts):
-            
-            switch_prob = np.random.uniform()
-            
-            # adjust epsilon if schedule provided
-            adjustor = round((cast / casts_per_schedule) - 1)
-            adj_epsilon = schedule[adjustor]
-            
-            # random switch
-            if adj_epsilon >= switch_prob:
-                
-                # switch lures randomly
-                curr_lure, curr_lure_pct = self.random_start(exclusions = [curr_lure])
-                
-                # simulate cast with switched lure
-                temp_cast_bool = self.simulate_cast(curr_lure_pct)
-                
-                cast_success.append(temp_cast_bool)
-                
-                if curr_lure in obs_catch_dict.keys():
-                    
-                    # add results from current cast to dictionary of catches
-                    temp_catch_list = obs_catch_dict[curr_lure]
-                    temp_catch_list.append(temp_cast_bool)
-                    obs_catch_dict[curr_lure] = temp_catch_list
-                    
-                else:
-                    
-                    # create a new element to keep track of lure's first cast
-                    obs_catch_dict[curr_lure] = [temp_cast_bool]
-            
-            # switch to lure with highest payout
-            else:
-                
-                # find lure with highest payout
-                temp_catch_pct_dict = {}
-                for lures, catches in obs_catch_dict.items():
-                    catch_pct = np.sum(catches)/len(catches)
-                    temp_catch_pct_dict[lures] = catch_pct
-                    
-                curr_lure = max(temp_catch_pct_dict, key=lambda key: temp_catch_pct_dict[key])
-                
-                
-                # simulate cast with switched lure
-                temp_cast_bool = self.simulate_cast(curr_lure_pct)
-                    
-                # add results from current cast to dictionary of catches
-                temp_catch_list = obs_catch_dict[curr_lure]
-                temp_catch_list.append(temp_cast_bool)
-                obs_catch_dict[curr_lure] = temp_catch_list
-                
-                cast_success.append(temp_cast_bool)
-                
-        
-        return cast_success
  
 
     def one_round_learn(self, num_tests, output_for_elminate_n = False,
-                        output_for_elminate_dict = {}):
+                        output_for_elminate_dict = {},
+                        output_for_greedy_eps = False):
         
         '''
             Limits learn to one round, where each lure is used for
@@ -369,15 +278,25 @@ class MultiArmedFish():
             is used for all remaining casts
             
             inputs:
-                num_test (int) :
-                top_n_return (bool) : 
-                
-            returns:
+                num_test (int) : number of casts for each lure in the first round
+                output_for_elminate_n (bool; False) : indicates if output should be 
+                                                      set up for use in eliminate n 
+                                                      algorithm
+                output_for_eliminate_dict (dict)    : dict with boolean list of 
+                                                      cast results for each lure
+                output_for_greed_eps (bool; False)  : indicates if output that works
+                                                      for greedy epsilon algorithm 
+                                                      should be returned
             
+            Outputs:
+                catch_list (list) : list of bools that represent the results
+                                    of each cast in order.
         '''
 
         test_payouts = {}
+        test_payouts_lists = {}
         cast_count = 0
+        catch_bool_list = []
 
         # test each lure to decide which one to use for the
         # rest of the casts
@@ -402,12 +321,18 @@ class MultiArmedFish():
                 
                 catch_bool = self.simulate_cast(lure_pct)
                 catch_list.append(catch_bool)
+                catch_bool_list.append(catch_bool)
 
 
             # now that test for this lure is done, count successes
             catches = np.sum(catch_list)
             test_payouts[lure] = catches
-                
+            test_payouts_lists[lure] = catch_list
+
+        # return the results of the one-round to feed into the greed
+        # epsilon algorithm if indicated by user
+        if output_for_greedy_eps:
+            return test_payouts_lists, catch_bool_list
             
         # get highest catching lure
         best_lure = max(test_payouts, key=test_payouts.get)
@@ -431,11 +356,22 @@ class MultiArmedFish():
     def eliminate_n(self, n, num_tests):
         
         '''
+            Algorithm that iteratively performs learning rounds.  After
+            each round, the n lures with the lowest catches are removed
+            from the list of possible lures.  This is followed until only 
+            one lure remains, this lure is then used for however many
+            casts are left.
         
             inputs:
-                n (int) : number of lures to eliminate for each
-                          iteration, higher is more aggressive as
-                          more lures will be eliminated more quickly
+                n (int)         : number of lures to eliminate for each
+                                  iteration, higher is more aggressive as
+                                  more lures will be eliminated more quickly
+                num_tests (int) : the number of casts that are done 
+                                  for each lure in each round.
+
+            returns:
+                catch_success (list) : bool list of whether or not each
+                                       cast caught a fish.
         
         '''
         
@@ -481,3 +417,76 @@ class MultiArmedFish():
         catch_success = catches
                 
         return catch_success
+    
+
+    def epsilon_greedy(self, epsilon, rand_start_casts = 3):
+            
+            '''
+                Starts with a random lure and gathers data on it,
+                with a probability of epsilon at each cast, change the lure
+                and gather data.  With a probability of 1-epsilon go back to 
+                the lure with the highest payout
+                
+                inputs:
+                    epsilon (float) : probability used to randomly switch lures
+                    schedule (list) : factors to adjust epsilon based on 
+                                    total number of casts - can be used 
+                                    to lower the probability of switching later
+                                    in trip - default = [1]
+                    
+                outputs:
+                    cast_success (list) : list of 1's and 0's representing if a cast
+                                        caught a fish or not
+            
+            '''
+
+            # create a dictionary to keep track of observed catches
+            obs_catch_dict, cast_success = self.one_round_learn(rand_start_casts, output_for_greedy_eps = True)
+            
+            cast_count = rand_start_casts*len(obs_catch_dict)
+
+            # get highest catching lure
+            curr_lure = max(obs_catch_dict, key=obs_catch_dict.get)
+            curr_lure_pct = self.lures[curr_lure] 
+            
+            # for the remaining casts, use the epsilon-greedy approach
+            for _ in range(cast_count, self.casts):
+                
+                switch_prob = np.random.uniform()
+                
+                # random switch
+                if epsilon >= switch_prob:
+                    
+                    # switch lures randomly
+                    curr_lure, curr_lure_pct = self.random_start(exclusions = [curr_lure])
+                    
+                    # simulate cast with switched lure
+                    temp_cast_bool = self.simulate_cast(curr_lure_pct)
+                    
+                    cast_success.append(temp_cast_bool)
+                        
+                    # add results from current cast to dictionary of catches
+                    temp_catch_list = obs_catch_dict[curr_lure]
+                    temp_catch_list.append(temp_cast_bool)
+                    obs_catch_dict[curr_lure] = temp_catch_list
+                
+                # switch to lure with highest payout
+                else:
+                        
+                    curr_lure = max(obs_catch_dict, key=obs_catch_dict.get)
+                    curr_lure_pct = self.lures[curr_lure] 
+                    
+                    # simulate cast with switched lure
+                    temp_cast_bool = self.simulate_cast(curr_lure_pct)
+                        
+                    # add results from current cast to dictionary of catches
+                    temp_catch_list = obs_catch_dict[curr_lure]
+                    temp_catch_list.append(temp_cast_bool)
+                    obs_catch_dict[curr_lure] = temp_catch_list
+                    
+                    cast_success.append(temp_cast_bool)
+
+            return cast_success    
+        
+
+    
